@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SHARED SERVER</title>
+<style>
+:root{--paper:#f6f1e3;--ink:#1d1d1d;--blue:#1f5fbf;--dim:#6b6b6b;--green:#2e7d32;--red:#b23a2b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace;padding:16px}
+h1{color:var(--blue);letter-spacing:4px;font-size:22px;margin:0 0 4px}
+p{color:var(--dim);margin:0 0 16px}
+.box{border:2px solid var(--ink);padding:12px;margin-bottom:12px;background:#fffdf6}
+.ok{color:var(--green)}.bad{color:var(--red)}
+.app{color:var(--blue);font-weight:bold}
+</style>
+</head>
+<body>
+<h1>SHARED SERVER</h1>
+<p>one Claude key. every app calls here.</p>
+<div class="box" id="state">checking...</div>
+<div class="box" id="apps"></div>
+<script>
+fetch("/api/shared-server-v1-claude").then(function(r){ return r.json(); }).then(function(d){
+  document.getElementById("state").innerHTML = d.ai ? '<span class="ok">online with AI key</span>' : '<span class="bad">online, no AI key yet</span>';
+  document.getElementById("apps").innerHTML = "apps connected:<br>" + (d.apps || []).map(function(a){ return '<span class="app">' + a + '</span>'; }).join("<br>");
+}).catch(function(){ document.getElementById("state").innerHTML = '<span class="bad">server did not answer</span>'; });
+</script>
+</body>
+</html>
