@@ -48,23 +48,6 @@ function heckleText(limit) {
   return (body) => String(body.text || "").slice(0, limit);
 }
 
-function repoClonerClean(raw) {
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  let parsed = null;
-  if (start >= 0 && end > start) {
-    try { parsed = JSON.parse(raw.slice(start, end + 1)); } catch (e) { parsed = null; }
-  }
-  if (!parsed) return { score: null, text: raw.slice(0, 1200) };
-  const out = {};
-  let n = parseInt(parsed.score, 10);
-  out.score = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : null;
-  for (const k of ["verdict", "swap", "keep", "twist", "risk"]) {
-    if (typeof parsed[k] === "string") out[k] = parsed[k].slice(0, 600);
-  }
-  return out;
-}
-
 module.exports = {
   "heckle-troll-roast": {
     model: "claude-sonnet-5-5",
@@ -88,21 +71,6 @@ module.exports = {
       "Start with one paragraph of roast. Then a paragraph that begins with Merge these: naming each group. Then a paragraph that begins with Kill or finish these:. Then a paragraph that begins with Keep and polish these:."
     ]).join(" "),
     buildUser: heckleText(120000)
-  },
-  "repo-cloner-score": {
-    model: "claude-sonnet-5-5",
-    maxTokens: 900,
-    system: [
-      "You judge open source games on GitHub for a solo developer who wants to fork one, put his own skin on it, add his own twist, and ship it as his own game, sometimes for sale.",
-      "You get the repo license, stats, flags from an automatic license scan, the file tree, and the README.",
-      "Score from 0 to 100 how good a reskin base it is: clean license for selling, art and sound easy to swap, small readable code, runs in a browser, fun core loop worth keeping.",
-      "Drop the score hard for any asset or code that is noncommercial, all rights reserved, GPL, or of unclear origin, and say so in risk.",
-      "Only judge from what you were given. Never invent files or facts.",
-      "Reply with JSON only, no other text, in this shape: {\"score\":0,\"verdict\":\"one or two sentences\",\"swap\":\"what art, sound, text and names to replace\",\"keep\":\"what code and mechanics are worth keeping\",\"twist\":\"one idea to make it his own\",\"risk\":\"license or asset risks, or none seen\"}",
-      "Plain words. No markdown, no lists, no em dashes, no en dashes."
-    ].join("\n"),
-    buildUser: (body) => String(body.text || "").slice(0, 60000),
-    finish: repoClonerClean
   },
   "text-based-game": {
     model: "claude-haiku-5-5",
