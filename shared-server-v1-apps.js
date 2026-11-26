@@ -131,7 +131,11 @@ function hvUser(body) {
     .map((c) => c.id + " = " + hvStr(c.name, 60));
   const parts = hvImages(body);
   let ctx = "";
-  if (body.context && typeof body.context === "object") ctx = hvStr(JSON.stringify(hvIdentifyClean(JSON.stringify(body.context))), 9000);
+  if (body.context && typeof body.context === "object") {
+    const c = hvIdentifyClean(JSON.stringify(Object.assign({}, body.context, { facts: [] })));
+    c.facts = (Array.isArray(body.context.facts) ? body.context.facts : []).slice(0, 160).map((f) => hvStr(f, 240)).filter(Boolean);
+    ctx = hvStr(JSON.stringify(c), 24000);
+  }
   parts.push({ type: "text", text: "CARS: " + (cars.join("; ") || "none") + "\nCONTEXT: " + (ctx || "none") + "\nScan this photo." });
   return parts;
 }
@@ -187,6 +191,69 @@ function hvClean(raw) {
   return out;
 }
 
+// Only documents the Hub View worker stored in the shared Supabase bucket may be sent to the AI.
+const HV_DOC_HOST = /^https:\/\/zasyjjoypkpvyqdueums\.supabase\.co\/storage\/v1\/object\/public\/hv-files\/[A-Za-z0-9_./-]{3,200}\.pdf$/;
+const HV_MANUALS = [
+  "You find downloadable manuals for Hub View, a 3D exploded view parts app.",
+  "Given an exact product, use web search to find direct links to PDF files from the manufacturer or a trustworthy archive: the service manual, maintenance and service guide, illustrated parts catalog, disassembly guide, quick specs or spec sheet.",
+  "Only list links that point straight at a PDF file. Prefer the manufacturer's own site.",
+  "Reply with JSON only, no other text: {\"pdfs\":[{\"title\":\"\",\"url\":\"\"}]} with at most 6 links."
+].join("\n");
+const HV_EXTRACT = [
+  "You read manuals for Hub View, a 3D exploded view parts app.",
+  "You get pages from a service manual or spec sheet for one exact product. Pull out every hard fact needed to rebuild it as an exploded 3D parts model.",
+  "facts: short lines with overall dimensions, component sizes, form factors, screw sizes, threads and counts, torque values, part numbers and how parts mount to each other.",
+  "parts: every component and fastener with its name, spare part_number, qty, size_mm as [length, height, width] when the pages give it, and the page number it came from.",
+  "diagram_pages: page numbers in this document that show exploded views, component locations, disassembly drawings or parts illustrations.",
+  "Never invent a number the pages do not give. Write plain words with no dashes used as punctuation.",
+  "Reply with JSON only, no other text: {\"overall_size_mm\":[0,0,0],\"facts\":[\"\"],\"parts\":[{\"name\":\"\",\"part_number\":\"\",\"qty\":\"\",\"size_mm\":[0,0,0],\"page\":0}],\"diagram_pages\":[0]}"
+].join("\n");
+const HV_VERIFY = [
+  "You fact check Hub View builds. A build is a parts list with sizes and positions that becomes an exploded 3D model of one exact product.",
+  "You get the build, the facts and parts pulled from the product's manual, and the results of automatic geometry checks.",
+  "Check every part: does its name, part number, size, count and thread agree with the manual facts? Does it fit inside the product and sit in a believable place? Is any part in the manual missing from the build?",
+  "verdict is pass only when nothing important disagrees with the sources and no major part is missing. Otherwise verdict is flag.",
+  "Write plain words with no dashes used as punctuation.",
+  "Reply with JSON only, no other text: {\"verdict\":\"pass\",\"summary\":\"\",\"checks\":[{\"part\":\"\",\"ok\":true,\"note\":\"\"}],\"missing\":[\"\"]}"
+].join("\n");
+function hvList(v, n, len) { return (Array.isArray(v) ? v : []).slice(0, n).map((x) => hvStr(x, len)).filter(Boolean); }
+function hvManualsClean(raw) {
+  const j = hvJson(raw) || {};
+  return { pdfs: (Array.isArray(j.pdfs) ? j.pdfs : []).slice(0, 6).map((x) => ({ title: hvStr(x && x.title, 120), url: hvUrl(x && x.url) })).filter((x) => x.url) };
+}
+function hvExtractUser(body) {
+  const docs = (Array.isArray(body.docs) ? body.docs : []).filter((u) => HV_DOC_HOST.test(String(u))).slice(0, 2);
+  const parts = docs.map((u) => ({ type: "document", source: { type: "url", url: u } }));
+  parts.push({ type: "text", text: "PRODUCT: " + hvStr(body.product, 160) + "\nRead these pages and pull out the facts." });
+  return parts;
+}
+function hvExtractClean(raw) {
+  const j = hvJson(raw);
+  if (!j) return { error: "extract unreadable" };
+  return {
+    overall_size_mm: hvVec(j.overall_size_mm, 0, 30000),
+    facts: hvList(j.facts, 160, 240),
+    parts: (Array.isArray(j.parts) ? j.parts : []).slice(0, 120).map((p) => ({
+      name: hvStr(p && p.name, 80), part_number: hvStr(p && p.part_number, 40), qty: hvStr(p && p.qty, 12),
+      size_mm: hvVec(p && p.size_mm, 0, 30000), page: Math.max(0, Math.min(5000, parseInt(p && p.page, 10) || 0))
+    })).filter((p) => p.name),
+    diagram_pages: (Array.isArray(j.diagram_pages) ? j.diagram_pages : []).map((n) => parseInt(n, 10)).filter((n) => n > 0 && n < 5000).slice(0, 30)
+  };
+}
+function hvVerifyUser(body) {
+  return [{ type: "text", text: "BUILD: " + hvStr(JSON.stringify(body.build || {}), 60000) + "\n\nMANUAL: " + hvStr(JSON.stringify(body.manual || {}), 40000) + "\n\nGEOMETRY CHECKS: " + hvStr(JSON.stringify(body.geometry || []), 8000) }];
+}
+function hvVerifyClean(raw) {
+  const j = hvJson(raw);
+  if (!j) return { error: "verify unreadable" };
+  return {
+    verdict: j.verdict === "pass" ? "pass" : "flag",
+    summary: hvStr(j.summary, 500),
+    checks: (Array.isArray(j.checks) ? j.checks : []).slice(0, 80).map((c) => ({ part: hvStr(c && c.part, 80), ok: !!(c && c.ok), note: hvStr(c && c.note, 200) })),
+    missing: hvList(j.missing, 40, 120)
+  };
+}
+
 module.exports = {
   "hubview-identify": {
     model: "claude-sonnet-5-5",
@@ -195,6 +262,28 @@ module.exports = {
     tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }],
     buildUser: hvIdentifyUser,
     finish: hvIdentifyClean
+  },
+  "hubview-manuals": {
+    model: "claude-sonnet-5-5",
+    maxTokens: 1500,
+    system: HV_MANUALS,
+    tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }],
+    buildUser: (body) => "PRODUCT: " + hvStr(body.product, 160) + "\nFind direct PDF links for its manuals.",
+    finish: hvManualsClean
+  },
+  "hubview-extract": {
+    model: "claude-sonnet-5-5",
+    maxTokens: 8000,
+    system: HV_EXTRACT,
+    buildUser: hvExtractUser,
+    finish: hvExtractClean
+  },
+  "hubview-verify": {
+    model: "claude-sonnet-5-5",
+    maxTokens: 5000,
+    system: HV_VERIFY,
+    buildUser: hvVerifyUser,
+    finish: hvVerifyClean
   },
   "hubview-scan": {
     model: "claude-sonnet-5-5",

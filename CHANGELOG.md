@@ -1,3 +1,5 @@
+2026-11-25, v2026.11.25c. Added the hubview-manuals, hubview-extract and hubview-verify apps for the Hub View worker. They find manual PDFs, read the kept manual pages from the shared Supabase bucket, and fact check finished builds against them.
+
 2026-11-25, v2026.11.25b. Added the hubview-identify app, which reads the photo, pins down the exact model and searches the web for its spec sheet and service manual. The hubview-scan app now uses those facts for real sizes and part numbers, picks standard parts from a shape library, and places every copy of a fastener. Apps can now use web search, and a failed AI call reports its reason.
 
 2026-11-25, v2026.11.25. Added the hubview-scan app for Hub View, which reads one photo and returns a parts list with sizes, threads and a rough layout so Hub View can build an exploded view of it. Hub View is allowed to call the server from its own site.
