@@ -51,8 +51,11 @@ module.exports = async function handler(req, res) {
       })
     });
     if (!r.ok) {
-      console.error("ai " + r.status + " " + (await r.text()).slice(0, 200));
-      return res.status(502).json({ error: "ai failed" });
+      const t = await r.text();
+      console.error("ai " + r.status + " " + t.slice(0, 200));
+      let why = "";
+      try { why = (JSON.parse(t).error || {}).type || ""; } catch (e) { why = ""; }
+      return res.status(502).json({ error: "ai failed", status: r.status, why });
     }
     const data = await r.json();
     const raw = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
