@@ -40,25 +40,32 @@ module.exports = async function handler(req, res) {
     if (!KEY) return res.status(503).json({ error: "no ai key" });
     const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || "unknown";
     if (tooMany(body.app + ":" + ip)) return res.status(429).json({ error: "slow down" });
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": KEY, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: app.model,
-        max_tokens: app.maxTokens,
-        system: app.system,
-        messages: [{ role: "user", content: app.buildUser(body) }]
-      })
-    });
-    if (!r.ok) {
-      const t = await r.text();
-      console.error("ai " + r.status + " " + t.slice(0, 200));
-      let why = "";
-      try { why = (JSON.parse(t).error || {}).type || ""; } catch (e) { why = ""; }
-      return res.status(502).json({ error: "ai failed", status: r.status, why });
+    const messages = [{ role: "user", content: app.buildUser(body) }];
+    let data = null;
+    for (let turn = 0; turn < 3; turn++) {
+      const payload = { model: app.model, max_tokens: app.maxTokens, system: app.system, messages };
+      if (app.tools) payload.tools = app.tools;
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": KEY, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify(payload)
+      });
+      if (!r.ok) {
+        const t = await r.text();
+        console.error("ai " + r.status + " " + t.slice(0, 200));
+        let why = "";
+        try { why = (JSON.parse(t).error || {}).type || ""; } catch (e) { why = ""; }
+        return res.status(502).json({ error: "ai failed", status: r.status, why });
+      }
+      data = await r.json();
+      if (data.stop_reason !== "pause_turn") break;
+      messages.push({ role: "assistant", content: data.content });
     }
-    const data = await r.json();
-    const raw = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+    // With web search the answer is the text written after the last search result.
+    const blocks = data.content || [];
+    let from = 0;
+    blocks.forEach((b, i) => { if (b.type === "web_search_tool_result") from = i + 1; });
+    const raw = blocks.slice(from).filter((b) => b.type === "text").map((b) => b.text).join("");
     return res.status(200).json(app.finish ? app.finish(raw) : { text: raw });
   } catch (e) {
     console.error(e.message);
