@@ -13,8 +13,19 @@ function tooMany(ip) {
   return list.length > 30;
 }
 
+// Browser apps on other sites that may call this server.
+const ORIGINS = [/^https:\/\/2026-11-22-orange-hubview[a-z0-9-]*\.vercel\.app$/];
+
 module.exports = async function handler(req, res) {
   res.setHeader("content-type", "application/json");
+  const origin = String(req.headers.origin || "");
+  if (ORIGINS.some((r) => r.test(origin))) {
+    res.setHeader("access-control-allow-origin", origin);
+    res.setHeader("vary", "origin");
+    res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
+    res.setHeader("access-control-allow-headers", "content-type");
+  }
+  if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method === "GET") {
     return res.status(200).json({ ok: true, name: "shared-server-v1", ai: Boolean(KEY), apps: Object.keys(APPS) });
   }

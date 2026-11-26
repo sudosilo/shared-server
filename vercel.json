@@ -1,5 +1,13 @@
 {
   "rewrites": [
-    { "source": "/", "destination": "/shared-server-v1.html" }
-  ]
+    {
+      "source": "/",
+      "destination": "/shared-server-v1.html"
+    }
+  ],
+  "functions": {
+    "api/shared-server-v1-claude.js": {
+      "maxDuration": 60
+    }
+  }
 }
