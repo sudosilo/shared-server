@@ -54,8 +54,9 @@ module.exports = async function handler(req, res) {
         const t = await r.text();
         console.error("ai " + r.status + " " + t.slice(0, 200));
         let why = "";
-        try { why = (JSON.parse(t).error || {}).type || ""; } catch (e) { why = ""; }
-        return res.status(502).json({ error: "ai failed", status: r.status, why });
+        let msg = "";
+        try { const er = JSON.parse(t).error || {}; why = er.type || ""; msg = String(er.message || "").slice(0, 160); } catch (e) { why = ""; }
+        return res.status(502).json({ error: "ai failed", status: r.status, why, msg });
       }
       data = await r.json();
       if (data.stop_reason !== "pause_turn") break;
